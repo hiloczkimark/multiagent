@@ -2,7 +2,7 @@
 
 Give it a topic and it researches the topic, writes, edits, generates a cover image and publishes to a CMS, for under $0.75 and in under 3 minutes.
 
-Status: **step 2 of 6**: scaffolding, cost and time tracking, the researcher (quotes checked against the live source pages) and the writer.
+Status: **step 3 of 6**: scaffolding, cost and time tracking, the researcher (quotes checked against the live source pages), the writer, and the editor loop (Opus fact-checks against the brief's quotes, Sonnet revises, Opus re-checks; results in `eval_report.json`).
 
 ## Setup (Windows / PowerShell)
 
@@ -33,7 +33,7 @@ cli.py                    run / resume / costs / bench
 pipeline/
   config.py               models, prices, research presets, writer settings, budgets and targets
   bench.py                research benchmark (cli.py bench)
-  schemas.py              contracts passed between stages (ResearchBrief, Draft)
+  schemas.py              contracts passed between stages (ResearchBrief, Draft, EditReview, Revision)
   orchestrator.py         runs the stages in order, supports resuming
   tracking.py             costs.jsonl (one line per API call) and timings.json
   runstore.py             runs/<run_id>/ files
@@ -41,10 +41,15 @@ pipeline/
   livepages.py            fetches source pages ourselves to check quotes
   agents/research.py      stage 1
   agents/write.py         stage 2
+  agents/edit.py          stage 3: review -> revise -> re-review, round 2 behind cost/time guards
   prompts/researcher.md   (+ researcher_tools_{dynamic,basic}.md; researcher_v1.md = baseline preset)
-  prompts/writer.md
+  prompts/writer.md  prompts/editor.md  prompts/reviser.md
 runs/<run_id>/
   run.json  costs.jsonl  timings.json
   01_research.json  01_research_checks.json  01_research_meta.json  01_research_transcript.json
   02_draft.json  02_draft.md  02_draft_checks.json
+  03_review_<n>.json  03_draft_r<n>.json/.md  03_edited.json  03_edited.md  eval_report.json
 ```
+
+`tests/test_edit.py::test_seeded_fault_is_caught_and_corrected` is the offline check that the
+edit loop catches a planted error and corrects it, with the evidence in `eval_report.json`.

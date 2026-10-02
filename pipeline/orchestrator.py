@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from .agents import research, write
+from .agents import edit, research, write
 from .runstore import RunStore
 from .tracking import Tracker
 
@@ -21,10 +21,11 @@ class Stage:
     run: Callable[[RunStore, Tracker], object]
 
 
-# Later steps append: edit, verify, image, format, publish.
+# Later steps append: verify, image, format, publish.
 STAGES: list[Stage] = [
     Stage("research", "01_research.json", research.run),
     Stage("write", "02_draft.json", write.run),
+    Stage("edit", "03_edited.json", edit.run),
 ]
 STAGE_NAMES = [s.name for s in STAGES]
 

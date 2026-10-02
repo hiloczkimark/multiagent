@@ -1,12 +1,12 @@
 """Typed contracts passed between pipeline stages.
 
 Every stage reads the previous stage's model from disk and writes its own, so a
-run can be resumed from any stage. Later steps add EditReport, etc.
+run can be resumed from any stage.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -70,6 +70,54 @@ class Draft(BaseModel):
         description="Article body in Markdown: '## ' section headings, no H1, no reference list. "
         "Every factual sentence ends with citations like [1] or [1][3] using source ids from the brief."
     )
+
+
+Severity = Literal["critical", "major", "minor"]
+IssueCategory = Literal[
+    "wrong_fact",          # contradicts the quotes (number, year, unit, scope, ranking, comparison)
+    "unsupported",         # no quote supports it, incl. facts from outside the brief
+    "wrong_citation",      # the cited source doesn't say it (another source might)
+    "open_question_as_fact",
+    "brief_error",         # repeats a key point that the brief's own quotes contradict
+    "clarity",             # misleading or confusing wording, not a factual error
+]
+
+
+class ReviewIssue(BaseModel):
+    category: IssueCategory
+    severity: Severity = Field(description="critical: factually wrong. major: unsupported or miscited. "
+                                           "minor: clarity or emphasis.")
+    excerpt: str = Field(description="The problematic passage, copied exactly from the draft.")
+    problem: str = Field(description="What is wrong, in one or two sentences.")
+    evidence: str = Field(description="What the brief's quotes actually say (quote them), or 'no quote supports this'.")
+    fix: str = Field(description="A concrete fix that stays within the evidence: correct, soften, re-cite or remove.")
+
+
+class IssueStatus(BaseModel):
+    id: str = Field(description="Id of an issue from the previous review.")
+    status: Literal["fixed", "not_fixed"]
+    note: str = Field(description="One sentence on what changed, or what is still wrong.")
+
+
+class EditReview(BaseModel):
+    previous_issues: list[IssueStatus] = Field(
+        description="Status of every issue listed as previously open, in the revised draft. Empty on a first review."
+    )
+    issues: list[ReviewIssue] = Field(description="New problems only; don't repeat previously open issues.")
+    summary: str = Field(description="One or two sentences on the draft's factual state.")
+
+
+class Fix(BaseModel):
+    issue_id: str
+    action: Literal["corrected", "removed", "softened", "recited", "kept"]
+    note: str = Field(description="What you changed; for 'kept', why the issue doesn't apply.")
+
+
+class Revision(Draft):
+    fixes: list[Fix] = Field(description="One entry per issue you were given.")
+
+    def draft(self) -> Draft:
+        return Draft(title=self.title, standfirst=self.standfirst, body_markdown=self.body_markdown)
 
 
 def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:

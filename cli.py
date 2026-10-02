@@ -50,6 +50,14 @@ def print_costs(store: RunStore) -> None:
               f"{c['attempts']} attempt(s); numbers not in brief: {c['unsupported_numbers'] or 'none'}")
         for p in c["problems"]:
             print(f"  unresolved: {p}")
+    if store.exists("eval_report.json"):
+        r = store.read_json("eval_report.json")
+        n = r["counts"]
+        print(f"edit: {n['caught']} issues caught, {n['corrected']} corrected, {n['open']} open "
+              f"({n['open_blocking']} critical/major) in {r['revision_rounds']} round(s); "
+              f"caught and corrected: {'YES' if r['caught_and_corrected'] else 'no'}")
+        for d in r["round_decisions"]:
+            print(f"  {d}")
 
 
 def main(argv: list[str] | None = None) -> int:

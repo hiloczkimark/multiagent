@@ -18,6 +18,7 @@ MODELS = {
     "researcher": "claude-sonnet-5",
     "writer": "claude-sonnet-5",
     "editor": "claude-opus-5",
+    "reviser": "claude-sonnet-5",
     "verifier": "claude-haiku-4-5",
     "seo": "claude-haiku-4-5",
     "image_prompt": "claude-haiku-4-5",
@@ -43,6 +44,7 @@ class ModelPrice:
 
 PRICES = {
     "claude-opus-5": ModelPrice(5.00, 25.00),
+    "claude-opus-4-8": ModelPrice(5.00, 25.00),  # possible refusal-fallback model for Opus 5
     "claude-opus-5-5": ModelPrice(4.00, 20.00),
     "claude-sonnet-5": ModelPrice(2.00, 10.00),
     "claude-haiku-4-5": ModelPrice(1.00, 5.00),
@@ -97,6 +99,20 @@ class WriterSettings:
 WRITER = WriterSettings()
 
 
+# --- Editor settings -------------------------------------------------------
+
+@dataclass(frozen=True)
+class EditorSettings:
+    review_effort: str = "medium"
+    rereview_effort: str = "low"  # checks listed fixes + new problems; narrower than the first review
+    revise_effort: str = "low"
+    max_rounds: int = 2           # revisions; round 2 only if the guards below allow it
+    time_reserve_s: float = 30.0  # left for verify/format/publish when deciding on round 2
+
+
+EDITOR = EditorSettings()
+
+
 # --- Budgets (Definition of Done: < $0.75 and < 3 min end to end) ----------
 
 RUN_BUDGET_USD = 0.75
@@ -108,10 +124,12 @@ RUN_TIME_BUDGET_S = 180
 STAGE_BUDGET_USD = {
     "research": 0.25,
     "write": 0.06,
+    "edit": 0.25,
 }
 STAGE_TIME_BUDGET_S = {
     "research": 60,
     "write": 30,
+    "edit": 70,
 }
 
 # Acceptance bar for the research stage, checked by `cli.py bench`.

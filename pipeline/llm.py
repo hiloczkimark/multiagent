@@ -8,8 +8,12 @@ from typing import Any
 
 import anthropic
 
-from .config import PROMPTS_DIR, REQUEST_TIMEOUT_S
+from .config import PRICES, PROMPTS_DIR, REQUEST_TIMEOUT_S
 from .tracking import Tracker
+
+# Server-side refusal fallback: if a model's safety classifier declines, the API
+# reruns the request on Anthropic's recommended fallback model instead.
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
 @lru_cache(maxsize=1)
@@ -23,12 +27,21 @@ def load_prompt(name: str) -> str:
     return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
 
 
-def create(tracker: Tracker, *, stage: str, agent: str, model: str, **kwargs: Any) -> Any:
+def create(tracker: Tracker, *, stage: str, agent: str, model: str,
+           fallbacks: bool = False, **kwargs: Any) -> Any:
     """`client().messages.create` plus a cost/time record in costs.jsonl."""
     t0 = time.monotonic()
-    response = client().messages.create(model=model, **kwargs)
+    if fallbacks:
+        response = client().beta.messages.create(
+            model=model, betas=[FALLBACK_BETA], fallbacks="default", **kwargs)
+    else:
+        response = client().messages.create(model=model, **kwargs)
+    # A fallback may have answered; price the call by the model that did.
+    served_by = getattr(response, "model", None)
+    priced_as = served_by if isinstance(served_by, str) and served_by in PRICES else model
     tracker.record_response(
-        stage=stage, agent=agent, model=model, response=response,
+        stage=stage, agent=agent, model=priced_as, response=response,
         duration_s=time.monotonic() - t0,
+        **({"requested_model": model} if priced_as != model else {}),
     )
     return response

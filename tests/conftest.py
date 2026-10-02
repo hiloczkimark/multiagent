@@ -29,7 +29,8 @@ def scripted(monkeypatch):
             requests.append({**kwargs, "messages": list(kwargs["messages"])})
             return queue.pop(0)
 
-    monkeypatch.setattr(llm, "client", lambda: SimpleNamespace(messages=FakeMessages()))
+    fake = SimpleNamespace(messages=FakeMessages(), beta=SimpleNamespace(messages=FakeMessages()))
+    monkeypatch.setattr(llm, "client", lambda: fake)
     return queue, requests
 
 
