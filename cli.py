@@ -4,6 +4,7 @@
     python cli.py resume <run_id> [--from research]
     python cli.py costs <run_id>
     python cli.py spotcheck <run_id> [--fresh]
+    python cli.py cms
     python cli.py bench [--presets baseline,tuned] [--topics-file topics.txt]
     python cli.py bench --report runs/bench-<timestamp>
 """
@@ -16,7 +17,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from pipeline import bench, config, orchestrator
+from pipeline import bench, cms, config, orchestrator
 from pipeline.agents import research, verify
 from pipeline.runstore import RunStore
 from pipeline.tracking import Tracker
@@ -68,6 +69,21 @@ def print_costs(store: RunStore) -> None:
         counts = ", ".join(f"{n} {k}" for k, n in c["summary"].items() if n)
         print(f"spot-check: {len(c['claims'])} claims, {counts} -> {c['status'].upper()} "
               f"(details: python cli.py spotcheck {store.run_id})")
+    if store.exists("06_published.json"):
+        p = store.read_json("06_published.json")
+        print(f"published: {p['cms']} {p['status'].upper()} {p['post_id']} (revision {p['revision']}) "
+              f"{'NEEDS REVIEW' if p['needs_review'] else 'ready for an editor'}\n  preview: {p['url']}")
+        for note in p["review_notes"]:
+            print(f"  - {note}")
+
+
+def print_posts() -> None:
+    posts = cms.get_cms(config.CMS, config.CMS_MOCK_DIR).list_posts()
+    if not posts:
+        print("no posts yet")
+    for p in posts:
+        flag = "needs review" if p["needs_review"] else "ok"
+        print(f"{p['updated_at'][:16]}  {p['status']:<6} r{p['revision']:<2} {flag:<12} {p['title'][:60]}  ({p['id']})")
 
 
 def print_spotcheck(store: RunStore) -> None:
@@ -97,6 +113,8 @@ def main(argv: list[str] | None = None) -> int:
     p_costs = sub.add_parser("costs", help="per-agent cost and time breakdown for a run")
     p_costs.add_argument("run_id")
 
+    sub.add_parser("cms", help="list the draft posts in the mock CMS")
+
     p_spot = sub.add_parser("spotcheck", help="show the verified claims of a run, or check fresh ones")
     p_spot.add_argument("run_id")
     p_spot.add_argument("--fresh", action="store_true", help="verify a new random set of claims (~$0.01)")
@@ -108,6 +126,9 @@ def main(argv: list[str] | None = None) -> int:
     p_bench.add_argument("--report", metavar="BENCH_DIR", help="reprint the report of an earlier benchmark")
 
     args = parser.parse_args(argv)
+    if args.cmd == "cms":
+        print_posts()
+        return 0
     if args.cmd == "spotcheck":
         store = RunStore.open(args.run_id)
         if args.fresh or not store.exists("claims.json"):

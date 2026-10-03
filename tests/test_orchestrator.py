@@ -52,6 +52,31 @@ def test_background_failure_is_raised_after_the_foreground_finishes(store):
     assert done == ["edit"]
 
 
+def test_stage_waits_for_the_background_stage_it_needs(store):
+    events = []
+
+    def slow_image(store, tracker):
+        with tracker.stage("image", background=True):
+            time.sleep(0.2)
+            events.append("image")
+
+    def stage(name):
+        def run(store, tracker):
+            with tracker.stage(name):
+                events.append(name)
+        return run
+
+    orchestrator._run_stages(store, [
+        Stage("image", "a", slow_image, background=True),
+        Stage("edit", "b", stage("edit")),
+        Stage("format", "c", stage("format"), after=("image",)),
+        Stage("publish", "d", stage("publish")),
+    ])
+    assert events == ["edit", "image", "format", "publish"]
+    assert "wait_image" in store.read_json("timings.json")
+
+
 def test_pipeline_order():
-    assert orchestrator.STAGE_NAMES == ["research", "write", "image", "edit", "verify"]
+    assert orchestrator.STAGE_NAMES == ["research", "write", "image", "edit", "verify", "format", "publish"]
     assert [s.name for s in orchestrator.STAGES if s.background] == ["image"]
+    assert orchestrator.STAGES[orchestrator.STAGE_NAMES.index("format")].after == ("image",)

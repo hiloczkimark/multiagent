@@ -2,7 +2,9 @@
 
 Give it a topic and it researches the topic, writes, edits, generates a cover image and publishes to a CMS, for under $0.75 and in under 3 minutes.
 
-Status: **step 4 of 6**: research (quotes checked against the live source pages) → write → edit loop (Opus fact-checks against the brief's quotes, Sonnet revises, Opus re-checks; `eval_report.json`) → verify (Haiku spot-checks 3 claims against quotes and live pages; `claims.json`). The cover image is generated in the background during editing: DALL-E when `OPENAI_API_KEY` is set, a placeholder otherwise or if generation fails.
+Status: **step 5 of 6**, the full pipeline: research (quotes checked against the live source pages) → write → edit loop (Opus fact-checks against the brief's quotes, Sonnet revises, Opus re-checks; `eval_report.json`) → verify (Haiku spot-checks 3 claims against quotes and live pages; `claims.json`) → format (SEO, renumbered citations, sources list, HTML preview) → publish **as a draft** to the mock CMS in `cms_mock/`. The cover image is generated in the background during editing: DALL-E when `OPENAI_API_KEY` is set, a placeholder otherwise or if generation fails. Drafts carry review notes when a human should look first (open editor issues, failed spot-checks, placeholder cover).
+
+Latest full run (lithium-ion battery recycling): 141s, $0.41.
 
 ## Setup (Windows / PowerShell)
 
@@ -23,6 +25,7 @@ python cli.py resume <run_id> --from write
 python cli.py costs <run_id>             # breakdown by agent, with pass/fail on cost and time
 python cli.py spotcheck <run_id>         # the 3 verified claims with verdict and evidence
 python cli.py spotcheck <run_id> --fresh # verify 3 different claims (~$0.01)
+python cli.py cms                        # draft posts in the mock CMS (open preview.html in a browser)
 python cli.py bench                      # research presets x 5 topics vs stage targets (~$2.50)
 python cli.py bench --report runs/bench-<timestamp>
 pytest                                   # offline tests; no API calls
@@ -46,15 +49,22 @@ pipeline/
   agents/edit.py          stage 3: review -> revise -> re-review, round 2 behind cost/time guards
   agents/image.py         cover image (background stage): Haiku writes the prompt, an ImageProvider draws it
   agents/verify.py        spot-check of 3 claims
+  agents/format.py        SEO (Haiku), citations, sources list, Markdown/HTML, review notes
+  agents/publish.py       draft to the CMS
   images.py               ImageProvider: OpenAI (plain HTTPS) and placeholder
+  cms.py                  CMSAdapter + MockCMS (drafts only; one post per run, updated on re-publish)
+  render.py               citation renumbering, Markdown -> HTML, preview page
   prompts/researcher.md   (+ researcher_tools_{dynamic,basic}.md; researcher_v1.md = baseline preset)
-  prompts/writer.md  editor.md  reviser.md  image_prompt.md  verifier.md
+  prompts/writer.md  editor.md  reviser.md  image_prompt.md  verifier.md  seo.md
 runs/<run_id>/
   run.json  costs.jsonl  timings.json
   01_research.json  01_research_checks.json  01_research_meta.json  01_research_transcript.json
   02_draft.json  02_draft.md  02_draft_checks.json
   03_review_<n>.json  03_draft_r<n>.json/.md  03_edited.json  03_edited.md  eval_report.json
   04_cover.png|svg  04_cover.json  claims.json
+  05_article.json  05_article.md  05_article.html  06_published.json
+cms_mock/
+  index.json  posts/post-<run_id>/{post.json, preview.html, cover}
 ```
 
 Run time counts foreground stages only; the background image stage adds time only if the

@@ -3,7 +3,8 @@
 Each stage persists its artifact, so `resume(run_id, from_stage=...)` can
 re-run from any stage using the artifacts already on disk. A background stage
 starts in a thread and the following stages carry on; the run waits for it
-at the end, and only that wait counts towards the run's time.
+before the first stage that lists it in `after` (or at the end), and only that
+wait counts towards the run's time.
 """
 
 from __future__ import annotations
@@ -12,7 +13,8 @@ import threading
 from dataclasses import dataclass
 from typing import Callable
 
-from .agents import edit, image, research, verify, write
+from .agents import edit, image, publish, research, verify, write
+from .agents import format as fmt
 from .runstore import RunStore
 from .tracking import Tracker
 
@@ -23,15 +25,17 @@ class Stage:
     artifact: str
     run: Callable[[RunStore, Tracker], object]
     background: bool = False
+    after: tuple[str, ...] = ()  # background stages that must finish before this one starts
 
 
-# Later steps append: format, publish.
 STAGES: list[Stage] = [
     Stage("research", "01_research.json", research.run),
     Stage("write", "02_draft.json", write.run),
     Stage("image", "04_cover.json", image.run, background=True),  # needs the draft, not the edit
     Stage("edit", "03_edited.json", edit.run),
     Stage("verify", "claims.json", verify.run),
+    Stage("format", "05_article.json", fmt.run, after=("image",)),
+    Stage("publish", "06_published.json", publish.run),
 ]
 STAGE_NAMES = [s.name for s in STAGES]
 
@@ -57,7 +61,7 @@ def resume(run_id: str, from_stage: str | None = None) -> RunStore:
 
 def _run_stages(store: RunStore, stages: list[Stage]) -> None:
     tracker = Tracker(store)
-    background: list[tuple[Stage, threading.Thread, list[BaseException]]] = []
+    background: dict[str, tuple[threading.Thread, list[BaseException]]] = {}
     for stage in stages:
         if stage.background:
             errors: list[BaseException] = []
@@ -65,18 +69,25 @@ def _run_stages(store: RunStore, stages: list[Stage]) -> None:
                                       name=f"stage-{stage.name}", daemon=True)
             print(f"[{store.run_id}] {stage.name} started in the background", flush=True)
             thread.start()
-            background.append((stage, thread, errors))
+            background[stage.name] = (thread, errors)
             continue
+        for name in stage.after:
+            if name in background:
+                _join(name, *background.pop(name), store, tracker)
         _run_one(stage, store, tracker)
 
-    for stage, thread, errors in background:
-        if thread.is_alive():
-            with tracker.stage(f"wait_{stage.name}"):
-                thread.join()
-            print(f"[{store.run_id}] waited {tracker.timings[f'wait_{stage.name}']['duration_s']:.1f}s "
-                  f"for {stage.name}", flush=True)
-        if errors:
-            raise errors[0]
+    for name, (thread, errors) in background.items():
+        _join(name, thread, errors, store, tracker)
+
+
+def _join(name: str, thread: threading.Thread, errors: list[BaseException],
+          store: RunStore, tracker: Tracker) -> None:
+    if thread.is_alive():
+        with tracker.stage(f"wait_{name}"):
+            thread.join()
+        print(f"[{store.run_id}] waited {tracker.timings[f'wait_{name}']['duration_s']:.1f}s for {name}", flush=True)
+    if errors:
+        raise errors[0]
 
 
 def _run_one(stage: Stage, store: RunStore, tracker: Tracker) -> None:

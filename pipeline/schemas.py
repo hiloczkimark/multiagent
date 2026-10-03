@@ -132,6 +132,47 @@ class Verification(BaseModel):
     checks: list[ClaimVerdict]
 
 
+class SeoMeta(BaseModel):
+    meta_title: str = Field(description="Title for search results, at most 60 characters.")
+    meta_description: str = Field(description="Search snippet, 120 to 155 characters, factual, no clickbait.")
+    slug: str = Field(description="URL slug: lowercase words joined by hyphens, at most 6 words.")
+    tags: list[str] = Field(description="3 to 6 short topic tags, lowercase.")
+    cover_alt_text: str = Field(description="Alt text describing the cover image for screen readers, at most 125 characters.")
+
+
+class Reference(BaseModel):
+    number: int          # as cited in the published article (renumbered by first appearance)
+    source_id: int       # id in the research brief
+    title: str
+    publisher: str
+    published: str
+    url: str
+
+
+class Cover(BaseModel):
+    file: str
+    alt_text: str
+    placeholder: bool
+    provider: str
+
+
+class Article(BaseModel):
+    """The publishable package: everything a CMS needs, plus why it may need a human look."""
+    run_id: str
+    title: str
+    standfirst: str
+    slug: str
+    meta_title: str
+    meta_description: str
+    tags: list[str]
+    body_markdown: str   # renumbered citations + "Sources" section
+    body_html: str
+    cover: Cover
+    references: list[Reference]
+    word_count: int
+    review_notes: list[str]  # empty when nothing needs a human look
+
+
 def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
     """JSON schema for a model, shaped for `strict: true` tool use.
 

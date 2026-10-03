@@ -119,6 +119,12 @@ VERIFY_CLAIMS = 3             # claims spot-checked per article (Definition of D
 VERIFY_PAGE_EXCERPT_CHARS = 700  # per window of live page text shown alongside the quotes
 
 
+# --- CMS ---------------------------------------------------------------------
+
+CMS = "mock"                   # the pipeline only ever creates drafts
+CMS_MOCK_DIR = ROOT / "cms_mock"
+
+
 # --- Cover image -------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -156,6 +162,8 @@ STAGE_BUDGET_USD = {
     "edit": 0.25,
     "image": 0.10,
     "verify": 0.02,
+    "format": 0.01,
+    "publish": 0.0,
 }
 STAGE_TIME_BUDGET_S = {
     "research": 60,
@@ -163,6 +171,8 @@ STAGE_TIME_BUDGET_S = {
     "edit": 70,
     "image": 60,   # runs in the background during edit
     "verify": 15,
+    "format": 10,
+    "publish": 5,
 }
 
 # Acceptance bar for the research stage, checked by `cli.py bench`.
