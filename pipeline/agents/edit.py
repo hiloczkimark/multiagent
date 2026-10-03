@@ -173,8 +173,7 @@ def _guard(tracker: Tracker, clock: StageClock, last_round: tuple[float, float],
            settings: EditorSettings) -> tuple[bool, str]:
     round_cost, round_secs = last_round
     cost = tracker.total_usd + round_cost
-    done_s = sum(t["duration_s"] for name, t in tracker.timings.items() if name != STAGE)
-    secs = done_s + clock.elapsed() + round_secs
+    secs = tracker.seconds(exclude=STAGE) + clock.elapsed() + round_secs
     time_limit = config.RUN_TIME_BUDGET_S - settings.time_reserve_s
     if cost > config.RUN_SOFT_BUDGET_USD:
         return False, f"round 2 skipped: projected run cost ${cost:.3f} > ${config.RUN_SOFT_BUDGET_USD:.2f}"

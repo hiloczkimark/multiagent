@@ -113,6 +113,35 @@ class EditorSettings:
 EDITOR = EditorSettings()
 
 
+# --- Verifier ----------------------------------------------------------------
+
+VERIFY_CLAIMS = 3             # claims spot-checked per article (Definition of Done)
+VERIFY_PAGE_EXCERPT_CHARS = 700  # per window of live page text shown alongside the quotes
+
+
+# --- Cover image -------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ImageSettings:
+    # "auto": OpenAI when OPENAI_API_KEY is set, otherwise a placeholder.
+    provider: str = "auto"
+    model: str = "dall-e-3"
+    size: str = "1792x1024"
+    quality: str = "standard"
+    timeout_s: float = 60.0
+
+
+IMAGE = ImageSettings()
+
+# USD per image, OpenAI list prices; keep in sync with https://openai.com/api/pricing
+IMAGE_PRICES = {
+    ("dall-e-3", "standard", "1024x1024"): 0.040,
+    ("dall-e-3", "standard", "1792x1024"): 0.080,
+    ("dall-e-3", "hd", "1024x1024"): 0.080,
+    ("dall-e-3", "hd", "1792x1024"): 0.120,
+}
+
+
 # --- Budgets (Definition of Done: < $0.75 and < 3 min end to end) ----------
 
 RUN_BUDGET_USD = 0.75
@@ -125,11 +154,15 @@ STAGE_BUDGET_USD = {
     "research": 0.25,
     "write": 0.06,
     "edit": 0.25,
+    "image": 0.10,
+    "verify": 0.02,
 }
 STAGE_TIME_BUDGET_S = {
     "research": 60,
     "write": 30,
     "edit": 70,
+    "image": 60,   # runs in the background during edit
+    "verify": 15,
 }
 
 # Acceptance bar for the research stage, checked by `cli.py bench`.

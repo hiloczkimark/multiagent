@@ -3,6 +3,7 @@
     python cli.py run "topic"
     python cli.py resume <run_id> [--from research]
     python cli.py costs <run_id>
+    python cli.py spotcheck <run_id> [--fresh]
     python cli.py bench [--presets baseline,tuned] [--topics-file topics.txt]
     python cli.py bench --report runs/bench-<timestamp>
 """
@@ -16,7 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from pipeline import bench, config, orchestrator
-from pipeline.agents import research
+from pipeline.agents import research, verify
 from pipeline.runstore import RunStore
 from pipeline.tracking import Tracker
 
@@ -58,6 +59,27 @@ def print_costs(store: RunStore) -> None:
               f"caught and corrected: {'YES' if r['caught_and_corrected'] else 'no'}")
         for d in r["round_decisions"]:
             print(f"  {d}")
+    if store.exists("04_cover.json"):
+        c = store.read_json("04_cover.json")
+        note = f" (fell back: {c['error'][:120]})" if c.get("error") else ""
+        print(f"cover: {c['file']} from {c['provider']}/{c['model']}, ${c['cost_usd']:.3f}{note}")
+    if store.exists("claims.json"):
+        c = store.read_json("claims.json")
+        counts = ", ".join(f"{n} {k}" for k, n in c["summary"].items() if n)
+        print(f"spot-check: {len(c['claims'])} claims, {counts} -> {c['status'].upper()} "
+              f"(details: python cli.py spotcheck {store.run_id})")
+
+
+def print_spotcheck(store: RunStore) -> None:
+    c = store.read_json("claims.json")
+    print(f"\nSpot-check of {store.run_id}: {len(c['claims'])} of {c['candidates']} cited sentences "
+          f"(seed {c['seed']}) -> {c['status'].upper()}")
+    for claim in c["claims"]:
+        print(f"\n[{claim['verdict'].upper()}] claim {claim['id']}, sources {claim['source_ids']} "
+              f"(live page read for {claim['pages_loaded'] or 'none'})")
+        print(f"  {claim['sentence']}")
+        print(f"  why: {claim['explanation']}")
+        print(f"  evidence: {claim['evidence']}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -75,6 +97,10 @@ def main(argv: list[str] | None = None) -> int:
     p_costs = sub.add_parser("costs", help="per-agent cost and time breakdown for a run")
     p_costs.add_argument("run_id")
 
+    p_spot = sub.add_parser("spotcheck", help="show the verified claims of a run, or check fresh ones")
+    p_spot.add_argument("run_id")
+    p_spot.add_argument("--fresh", action="store_true", help="verify a new random set of claims (~$0.01)")
+
     p_bench = sub.add_parser("bench", help="benchmark research presets against the stage targets")
     p_bench.add_argument("--presets", default=",".join(config.RESEARCH_PRESETS),
                          help="comma-separated preset names (default: all)")
@@ -82,6 +108,13 @@ def main(argv: list[str] | None = None) -> int:
     p_bench.add_argument("--report", metavar="BENCH_DIR", help="reprint the report of an earlier benchmark")
 
     args = parser.parse_args(argv)
+    if args.cmd == "spotcheck":
+        store = RunStore.open(args.run_id)
+        if args.fresh or not store.exists("claims.json"):
+            seed = store.read_json("claims.json")["seed"] + 1 if store.exists("claims.json") else 0
+            verify.run(store, Tracker(store), seed=seed)
+        print_spotcheck(store)
+        return 0
     if args.cmd == "bench":
         if args.report:
             bench.print_report(Path(args.report))

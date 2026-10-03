@@ -120,6 +120,18 @@ class Revision(Draft):
         return Draft(title=self.title, standfirst=self.standfirst, body_markdown=self.body_markdown)
 
 
+class ClaimVerdict(BaseModel):
+    claim_id: int
+    verdict: Literal["supported", "partially_supported", "unsupported", "contradicted"]
+    explanation: str = Field(description="One or two sentences: what matches and what doesn't.")
+    evidence: str = Field(description="The decisive passage, copied exactly from a quote or page excerpt, "
+                                      "or 'none' if nothing addresses the claim.")
+
+
+class Verification(BaseModel):
+    checks: list[ClaimVerdict]
+
+
 def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
     """JSON schema for a model, shaped for `strict: true` tool use.
 

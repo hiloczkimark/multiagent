@@ -2,7 +2,7 @@
 
 Give it a topic and it researches the topic, writes, edits, generates a cover image and publishes to a CMS, for under $0.75 and in under 3 minutes.
 
-Status: **step 3 of 6**: scaffolding, cost and time tracking, the researcher (quotes checked against the live source pages), the writer, and the editor loop (Opus fact-checks against the brief's quotes, Sonnet revises, Opus re-checks; results in `eval_report.json`).
+Status: **step 4 of 6**: research (quotes checked against the live source pages) → write → edit loop (Opus fact-checks against the brief's quotes, Sonnet revises, Opus re-checks; `eval_report.json`) → verify (Haiku spot-checks 3 claims against quotes and live pages; `claims.json`). The cover image is generated in the background during editing: DALL-E when `OPENAI_API_KEY` is set, a placeholder otherwise or if generation fails.
 
 ## Setup (Windows / PowerShell)
 
@@ -21,6 +21,8 @@ python cli.py run "How heat pumps work in cold climates"
 python cli.py resume <run_id>            # run the stages whose output is missing
 python cli.py resume <run_id> --from write
 python cli.py costs <run_id>             # breakdown by agent, with pass/fail on cost and time
+python cli.py spotcheck <run_id>         # the 3 verified claims with verdict and evidence
+python cli.py spotcheck <run_id> --fresh # verify 3 different claims (~$0.01)
 python cli.py bench                      # research presets x 5 topics vs stage targets (~$2.50)
 python cli.py bench --report runs/bench-<timestamp>
 pytest                                   # offline tests; no API calls
@@ -42,14 +44,21 @@ pipeline/
   agents/research.py      stage 1
   agents/write.py         stage 2
   agents/edit.py          stage 3: review -> revise -> re-review, round 2 behind cost/time guards
+  agents/image.py         cover image (background stage): Haiku writes the prompt, an ImageProvider draws it
+  agents/verify.py        spot-check of 3 claims
+  images.py               ImageProvider: OpenAI (plain HTTPS) and placeholder
   prompts/researcher.md   (+ researcher_tools_{dynamic,basic}.md; researcher_v1.md = baseline preset)
-  prompts/writer.md  prompts/editor.md  prompts/reviser.md
+  prompts/writer.md  editor.md  reviser.md  image_prompt.md  verifier.md
 runs/<run_id>/
   run.json  costs.jsonl  timings.json
   01_research.json  01_research_checks.json  01_research_meta.json  01_research_transcript.json
   02_draft.json  02_draft.md  02_draft_checks.json
   03_review_<n>.json  03_draft_r<n>.json/.md  03_edited.json  03_edited.md  eval_report.json
+  04_cover.png|svg  04_cover.json  claims.json
 ```
+
+Run time counts foreground stages only; the background image stage adds time only if the
+run has to wait for it (`wait_image` in timings.json).
 
 `tests/test_edit.py::test_seeded_fault_is_caught_and_corrected` is the offline check that the
 edit loop catches a planted error and corrects it, with the evidence in `eval_report.json`.

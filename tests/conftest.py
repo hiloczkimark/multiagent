@@ -35,6 +35,12 @@ def scripted(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_openai_key(monkeypatch):
+    """Image tests must never reach OpenAI; tests that need a key set a fake one."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def live_pages(monkeypatch):
     """No network in tests: every live page 'fails to load' unless a test fills this dict."""
     pages: dict[str, str] = {}

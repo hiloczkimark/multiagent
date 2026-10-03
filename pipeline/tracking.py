@@ -8,6 +8,7 @@ runs/<id>/timings.json.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections import defaultdict
 from contextlib import contextmanager
@@ -66,9 +67,12 @@ def price_usage(model: str, usage: Any) -> tuple[float, dict[str, int]]:
 
 
 class Tracker:
+    """Shared by the stages of a run, including background ones, so writes are locked."""
+
     def __init__(self, store: RunStore):
         self.store = store
         self.costs_path = store.path("costs.jsonl")
+        self._lock = threading.Lock()
         self.records: list[CallRecord] = []
         if self.costs_path.exists():  # resumed run: keep earlier stages' spend
             for line in self.costs_path.read_text(encoding="utf-8").splitlines():
@@ -111,9 +115,10 @@ class Tracker:
         return rec
 
     def _append(self, rec: CallRecord) -> None:
-        self.records.append(rec)
-        with self.costs_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(asdict(rec)) + "\n")
+        with self._lock:
+            self.records.append(rec)
+            with self.costs_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(asdict(rec)) + "\n")
 
     @property
     def total_usd(self) -> float:
@@ -141,7 +146,9 @@ class Tracker:
     # --- time ---------------------------------------------------------------
 
     @contextmanager
-    def stage(self, name: str) -> Iterator["StageClock"]:
+    def stage(self, name: str, background: bool = False) -> Iterator["StageClock"]:
+        """Time a stage. Background stages run alongside others, so they don't add to
+        the run's wall-clock time; any wait for them is timed as its own stage."""
         clock = StageClock(name, STAGE_TIME_BUDGET_S.get(name))
         started_at = datetime.now(timezone.utc).isoformat()
         status = "ok"
@@ -152,18 +159,25 @@ class Tracker:
             raise
         finally:
             elapsed = clock.elapsed()
-            self.timings[name] = {
-                "started_at": started_at,
-                "duration_s": round(elapsed, 2),
-                "budget_s": clock.budget_s,
-                "over_budget": clock.budget_s is not None and elapsed > clock.budget_s,
-                "status": status,
-            }
-            self.store.write_json("timings.json", self.timings)
+            with self._lock:
+                self.timings[name] = {
+                    "started_at": started_at,
+                    "duration_s": round(elapsed, 2),
+                    "budget_s": clock.budget_s,
+                    "over_budget": clock.budget_s is not None and elapsed > clock.budget_s,
+                    "status": status,
+                    **({"background": True} if background else {}),
+                }
+                self.store.write_json("timings.json", self.timings)
+
+    def seconds(self, exclude: str | None = None) -> float:
+        """Wall-clock time of the run so far: foreground stages only."""
+        return sum(t["duration_s"] for name, t in self.timings.items()
+                   if not t.get("background") and name != exclude)
 
     @property
     def total_seconds(self) -> float:
-        return sum(t["duration_s"] for t in self.timings.values())
+        return self.seconds()
 
 
 class StageClock:
